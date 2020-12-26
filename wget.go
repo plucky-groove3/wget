@@ -22,7 +22,26 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/dustin/go-humanize"
 )
+
+type WgetProgress struct {
+	Total uint64
+}
+
+func (wp *WgetProgress) Write(p []byte) (int, error) {
+	n := len(p)
+	wp.Total += uint64(n)
+	wp.Print()
+	return n, nil
+}
+
+func (wp *WgetProgress) Print() {
+	fmt.Printf("\r%s", strings.Repeat(" ", 35))
+	fmt.Printf("\rDownloading... %s complete", humanize.Bytes(wp.Total))
+}
 
 const (
 	bufferSize = 1024 * 8
@@ -34,6 +53,7 @@ func getResp(url string) *http.Response {
 	if err != nil {
 		panic(err)
 	}
+	defer resp.Body.Close()
 	return resp
 }
 
@@ -43,9 +63,12 @@ func writeFile(filename string, resp *http.Response) bool {
 		panic(err)
 	}
 	defer file.Close()
-	if _, err = io.Copy(bufio.NewWriterSize(file, bufferSize), resp.Body); err != nil {
+
+	progress := &WgetProgress{}
+	if _, err = io.Copy(bufio.NewWriterSize(file, bufferSize), io.TeeReader(resp.Body, progress)); err != nil {
 		panic(err)
 	}
+	fmt.Print("\nDone.")
 	return true
 }
 
